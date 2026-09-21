@@ -1,0 +1,9 @@
+apiVersion: v2
+name: toorak-lending-api
+description: Production Helm chart for Toorak Lending Engine - FinacPlus Assignment
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Manik Singhal
+    email: candidate@finacplus.com

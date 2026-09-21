@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: toorak-lending-api
+  labels:
+    app: toorak-lending-api
+    app.kubernetes.io/name: toorak-lending-api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: toorak-lending-api

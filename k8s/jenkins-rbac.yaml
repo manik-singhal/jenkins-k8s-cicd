@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins-deployer-sa
+  namespace: finacplus-dev
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-deployer-role
+  namespace: finacplus-dev
+rules:
+  - apiGroups: ["", "apps", "autoscaling"]
+    resources:
+      - deployments
+      - replicasets
+      - services
+      - pods
+      - pods/log
+      - pods/exec
+      - configmaps
+      - secrets
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: finacplus-dev
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-deployer-sa
+    namespace: finacplus-dev
+roleRef:
+  kind: Role
+  name: jenkins-deployer-role
+  apiGroup: rbac.authorization.k8s.io
