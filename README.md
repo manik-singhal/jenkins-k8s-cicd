@@ -261,5 +261,4 @@ For enterprise production on Google Cloud:
 
 ## Author & Candidate Information
 - **Candidate:** Manik Singhal
-- **Role:** DevOps Engineer – Intern (FinacPlus / Toorak Capital Partners)
-- **Domain:** Fintech & Lending Platform Infrastructure Automation
+- **Role:** DevOps Engineer – Intern 
