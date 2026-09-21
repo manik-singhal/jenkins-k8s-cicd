@@ -52,7 +52,7 @@ echo -e "${GREEN}✓ Security vulnerability assessment complete.${NC}"
 # 5. Kubernetes Deployment & Rollout Verification
 echo -e "\n${YELLOW}[Stage 5/5] Deploying to Kubernetes cluster (${K8S_CONTEXT} / ${TARGET_NAMESPACE})...${NC}"
 kubectl --context="${K8S_CONTEXT}" create namespace "${TARGET_NAMESPACE}" --dry-run=client -o yaml | kubectl --context="${K8S_CONTEXT}" apply -f -
-kubectl --context="${K8S_CONTEXT}" apply -n "${TARGET_NAMESPACE}" -f k8s/base/
+kubectl --context="${K8S_CONTEXT}" apply -n "${TARGET_NAMESPACE}" -k k8s/base/
 
 # Update image in deployment
 kubectl --context="${K8S_CONTEXT}" set image deployment/${APP_NAME} ${APP_NAME}="${IMAGE_NAME}" -n "${TARGET_NAMESPACE}"

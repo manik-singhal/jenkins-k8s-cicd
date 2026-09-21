@@ -26,7 +26,11 @@ def call(Map config = [:]) {
             kubectl ${kubeconfigFlag} --context=${clusterContext} create namespace ${targetNamespace} --dry-run=client -o yaml | kubectl ${kubeconfigFlag} --context=${clusterContext} apply -f -
 
             echo "[INFO] Applying base Kubernetes manifests..."
-            kubectl ${kubeconfigFlag} --context=${clusterContext} apply -n ${targetNamespace} -f ${manifestsPath}/
+            if [ -f "${manifestsPath}/kustomization.yaml" ] || [ -f "${manifestsPath}/kustomization.yml" ]; then
+                kubectl ${kubeconfigFlag} --context=${clusterContext} apply -n ${targetNamespace} -k ${manifestsPath}/
+            else
+                kubectl ${kubeconfigFlag} --context=${clusterContext} apply -n ${targetNamespace} -f ${manifestsPath}/
+            fi
 
             echo "[INFO] Updating deployment image to: ${imageTag}..."
             kubectl ${kubeconfigFlag} --context=${clusterContext} set image deployment/${appName} ${appName}=${imageTag} -n ${targetNamespace} --record=true
