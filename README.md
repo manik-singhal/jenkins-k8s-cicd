@@ -174,7 +174,7 @@ In your GitHub repo → **Settings → Webhooks → Add Webhook**:
 - **Content type**: `application/json`
 - **Events**: Just the push event
 
-*(Note: For local testing on `localhost`, builds are triggered via **Build with Parameters** or an `ngrok` tunnel, as GitHub requires a publicly reachable address to deliver webhook payloads).*
+*(Note: For local testing on `localhost`, builds are triggered via **Build with Parameters**, as GitHub requires a publicly reachable address to deliver webhook payloads).*
 
 ### 4. Create Pipeline Job
 In Jenkins → **New Item → Pipeline**:
