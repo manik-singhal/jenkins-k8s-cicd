@@ -45,14 +45,12 @@ pipeline {
 
         stage('Unit Testing') {
             steps {
-                echo "--- Stage 2: Running PyTest ---"
+                echo "--- Stage 2: Running PyTest in Python 3.11 Container ---"
                 sh '''
-                    python3 -m venv .venv
-                    . .venv/bin/activate
-                    pip install --quiet --upgrade pip
-                    pip install --quiet -r app/requirements.txt
-                    
-                    python -m pytest app/tests/ -v
+                    docker run --rm -v "$(pwd)":/workspace -w /workspace python:3.11-slim bash -c "
+                        pip install --quiet -r app/requirements.txt
+                        pytest app/tests/ -v
+                    "
                 '''
             }
         }
@@ -119,7 +117,7 @@ pipeline {
                         kubectl --context=${clusterContext} apply -n ${targetNamespace} -f ${env.MANIFESTS_DIR}/
 
                         echo "Updating deployment image to ${env.IMAGE_TAG}..."
-                        kubectl --context=${clusterContext} set image deployment/${env.APP_NAME} ${env.APP_NAME}=${env.IMAGE_TAG} -n ${targetNamespace} --record=true
+                        kubectl --context=${clusterContext} set image deployment/${env.APP_NAME} ${env.APP_NAME}=${env.IMAGE_TAG} -n ${targetNamespace}
 
                         echo "Waiting for rollout to complete (timeout: ${timeoutSeconds}s)..."
                         if kubectl --context=${clusterContext} rollout status deployment/${env.APP_NAME} -n ${targetNamespace} --timeout=${timeoutSeconds}s; then
