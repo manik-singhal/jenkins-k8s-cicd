@@ -1,75 +1,33 @@
-# FinacPlus / Toorak Capital Partners: Enterprise CI/CD Pipeline
-### Automated Git-Jenkins-Kubernetes Delivery Engine with Groovy Shared Library & Observability
+# CI/CD Pipeline: Git → Jenkins → Kubernetes
 
-[![CI/CD](https://img.shields.io/badge/CI%2FCD-Jenkins%20Shared%20Library-blue.svg)](https://jenkins.io)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.34-326CE5.svg)](https://kubernetes.io)
-[![Docker](https://img.shields.io/badge/Docker-Multi--Stage%20Non--Root-2496ED.svg)](https://docker.com)
-[![Security](https://img.shields.io/badge/Security-Trivy%20Vulnerability%20Scan-orange.svg)](https://aquasecurity.github.io/trivy/)
-[![Observability](https://img.shields.io/badge/Observability-Prometheus%20%2B%20Grafana-E6522C.svg)](https://prometheus.io)
-[![IaC](https://img.shields.io/badge/IaC-Terraform%20GCP%20GKE-7B42BC.svg)](https://terraform.io)
+A CI/CD pipeline that automates the full delivery cycle — from Git push to a running deployment on Kubernetes — using Jenkins and Groovy scripting.
+
+Built as a DevOps assignment for **FinacPlus / Toorak Capital Partners**.
 
 ---
 
-## Executive Summary & Scenario Alignment
+## What This Does
 
-This repository delivers an end-to-end, enterprise-grade Continuous Integration and Continuous Deployment (CI/CD) pipeline built for **FinacPlus** supporting **Toorak Capital Partners**.
-
-The solution automates code integration from Git commits, runs isolated unit testing and container security scanning, publishes semantically versioned artifacts to container registries, and dynamically orchestrates zero-downtime rolling deployments across target Kubernetes clusters with **automatic rollback protection**.
-
-### Why This Solution Excels (Key Architectural Differentiators)
-1. **Modular Groovy Shared Library (`jenkins/jenkins-shared-library`)**: Unlike rudimentary single-file pipelines, this design implements an enterprise Groovy library separating pipeline orchestration logic from application code. Adding new microservices or new Kubernetes clusters requires only 10 lines of configuration.
-2. **Zero-Downtime & Automatic Rollback**: Kubernetes deployments enforce `maxUnavailable: 0` with post-deployment health verification. If a newly deployed version fails readiness probes, the pipeline **automatically triggers `kubectl rollout undo`** to restore cluster health.
-3. **Security-First Architecture**: Multi-stage Docker build running as an unprivileged non-root user (UID 10001), automated **Trivy container CVE vulnerability scanning**, and least-privilege Kubernetes RBAC policies.
-4. **Full-Stack Observability**: Native Prometheus instrumentation (`/metrics`) exposing golden signals (latency, error rates, throughput), Grafana dashboard configuration (`monitoring/grafana`), and Jenkins CI pipeline performance tracking.
-5. **Multi-Cluster & Cloud Ready (Dual-Approach)**: Includes both a zero-friction local sandbox (Docker Desktop / Kind / Minikube) and complete **Terraform IaC for Google Cloud Platform (GCP GKE & Artifact Registry)**.
+1. Developer pushes code to Git → Jenkins picks it up via webhook
+2. Jenkins runs unit tests, builds a Docker image, scans it for vulnerabilities (Trivy)
+3. Jenkins deploys the image to a Kubernetes cluster with rolling updates
+4. If the new deployment fails health checks, Jenkins **automatically rolls back** to the previous working version
 
 ---
 
-## Architecture Blueprint
+## Architecture
 
-```mermaid
-flowchart TD
-    subgraph Git["1. Version Control (Git)"]
-        Dev[Developer Commit / PR] -->|Push| GitHub[Git Repository]
-        GitHub -->|Webhook Trigger / SCM Poll| Jenkins
-    end
-
-    subgraph Jenkins["2. Jenkins Automation Engine"]
-        SharedLib["Groovy Shared Library\n(@Library('finacplus-shared-library'))"]
-        
-        subgraph Stages["Pipeline Execution Flow"]
-            S1["Stage 1: Checkout & SCM Verification"]
-            S2["Stage 2: Containerized PyTest Suite"]
-            S3["Stage 3: Docker Build & Tagging"]
-            S4["Stage 4: Trivy Security Vulnerability Scan"]
-            S5["Stage 5: Image Push to Registry (Docker Hub / GCP)"]
-            S6["Stage 6: Dynamic K8s Deployment & Rollout Watch"]
-            S7["Stage 7: Auto-Rollback Gate on Health Failure"]
-        end
-
-        SharedLib --> Stages
-    end
-
-    subgraph Registries["3. Container Artifact Storage"]
-        DockerHub[Docker Hub / GCP Artifact Registry]
-    end
-
-    subgraph Clusters["4. Kubernetes Target Clusters (Multi-Cluster Adaptability)"]
-        K8sLocal["Local Cluster (docker-desktop / kind)"]
-        K8sCloud["Cloud Cluster (GCP GKE / AWS EKS)"]
-    end
-
-    subgraph Monitoring["5. Observability Stack"]
-        Prom[Prometheus Metrics Scraper]
-        Graf[Grafana Dashboard Engine]
-    end
-
-    Stages -->|Push Artifact| DockerHub
-    Stages -->|Deploy Manifests| K8sLocal
-    Stages -->|Deploy Manifests| K8sCloud
-    K8sLocal -->|Expose /metrics| Prom
-    K8sCloud -->|Expose /metrics| Prom
-    Prom --> Graf
+```
+Developer → Git Push → GitHub Webhook → Jenkins Pipeline
+                                            │
+                                    ┌───────┴───────┐
+                                    │  Stage 1: Test │ (PyTest in container)
+                                    │  Stage 2: Build│ (Docker multi-stage)
+                                    │  Stage 3: Scan │ (Trivy CVE scan)
+                                    │  Stage 4: Push │ (Docker Hub)
+                                    │  Stage 5: Deploy│(kubectl → K8s cluster)
+                                    │     └── Rollback if health check fails
+                                    └───────────────┘
 ```
 
 ---
@@ -78,187 +36,181 @@ flowchart TD
 
 ```
 .
-├── Jenkinsfile                          # Enterprise pipeline invoking Groovy Shared Library
-├── Jenkinsfile.standalone               # Self-contained zero-config pipeline
-├── Dockerfile                           # Multi-stage hardened non-root container (Python 3.11)
-├── docker-compose.jenkins.yml           # Dockerized local Jenkins sandbox with Docker & K8s access
-├── app/                                 # Production FastAPI microservice (Toorak Lending Engine)
-│   ├── main.py                          # App entrypoint with /healthz, /readyz, /metrics, /api/v1/loans
-│   ├── requirements.txt                 # Application dependencies
+├── Jenkinsfile                       # Main pipeline — all stages in one file
+├── Dockerfile                        # Multi-stage build, runs as non-root user
+├── docker-compose.jenkins.yml        # Spin up local Jenkins with Docker + K8s access
+├── .gitignore
+├── .dockerignore
+│
+├── app/                              # Sample FastAPI microservice
+│   ├── main.py                       # Endpoints: /healthz, /readyz, /metrics, /api/v1/loans
+│   ├── requirements.txt
 │   └── tests/
-│       └── test_main.py                 # PyTest unit & integration tests
+│       └── test_main.py              # 5 unit tests covering health, metrics, and API
+│
 ├── jenkins/
-│   ├── Dockerfile.jenkins               # Custom Jenkins controller with Docker CLI, Kubectl, & Trivy
-│   └── jenkins-shared-library/          # Enterprise Groovy Shared Library
-│       ├── vars/
-│       │   ├── standardPipeline.groovy  # Reusable declarative pipeline master step
-│       │   ├── runUnitTests.groovy      # Test runner step
-│       │   ├── securityScan.groovy      # Trivy security scanning step
-│       │   ├── buildAndPushImage.groovy # Multi-tag Docker build & push step
-│       │   ├── deployToK8s.groovy       # Multi-cluster deployment & auto-rollback step
-│       │   └── notifyBuildStatus.groovy # Post-action notification handler
-│       └── src/com/finacplus/cicd/
-│           └── PipelineConfig.groovy    # Groovy typed configuration parser
-├── k8s/                                 # Kubernetes Manifests & GitOps
-│   ├── base/
-│   │   ├── deployment.yaml              # RollingUpdate deployment with non-root security context
-│   │   ├── service.yaml                 # ClusterIP service
-│   │   ├── configmap.yaml               # Application configuration
-│   │   ├── hpa.yaml                     # HorizontalPodAutoscaler (CPU & Memory metrics)
-│   │   └── kustomization.yaml           # Base Kustomize manifest
-│   ├── overlays/                        # Multi-environment overlays
-│   │   ├── dev/kustomization.yaml       # Dev environment (finacplus-dev, 1 replica)
-│   │   └── prod/kustomization.yaml      # Prod environment (finacplus-prod, 3 replicas + HPA)
-│   ├── helm/toorak-lending-api/         # Full production Helm Chart
-│   └── jenkins-rbac.yaml                # Least-privilege K8s ServiceAccount & RoleBinding
-├── monitoring/                          # SRE Observability Stack
-│   ├── prometheus/
-│   │   └── prometheus-scrape-config.yaml# ServiceMonitor and Prometheus scrape definitions
-│   └── grafana/
-│       └── dashboard-toorak-lending.json# Production Grafana Dashboard (Golden Signals)
-├── terraform/gke/                       # GCP Infrastructure as Code
-│   ├── main.tf                          # GKE Cluster, Workload Identity, & Artifact Registry
-│   └── variables.tf                     # Configurable parameters
-└── scripts/                             # Automation & Testing Runbook
-    ├── verify-local.sh                  # One-command end-to-end pipeline verification
-    └── simulate-failure-rollback.sh     # Automated rollback simulation and proof
+│   ├── Dockerfile.jenkins            # Custom Jenkins image with Docker CLI, kubectl, Trivy
+│   └── jenkins-shared-library/       # Groovy Shared Library (for scaling to multiple repos)
+│       └── vars/
+│           ├── standardPipeline.groovy
+│           ├── runUnitTests.groovy
+│           ├── buildAndPushImage.groovy
+│           ├── deployToK8s.groovy
+│           ├── securityScan.groovy
+│           └── notifyBuildStatus.groovy
+│
+├── k8s/                              # Kubernetes manifests
+│   ├── deployment.yaml               # RollingUpdate, probes, resource limits, non-root
+│   ├── service.yaml                  # ClusterIP service
+│   ├── configmap.yaml                # App environment config
+│   └── jenkins-rbac.yaml             # Least-privilege ServiceAccount for Jenkins
+│
+├── monitoring/
+│   └── prometheus-service-monitor.yaml
+│
+└── scripts/
+    ├── verify-local.sh               # Run all pipeline stages locally in one command
+    └── simulate-failure-rollback.sh  # Prove the auto-rollback works
 ```
 
 ---
 
-## Pipeline Stages & Groovy Automation Logic
+## Pipeline Stages (Jenkinsfile)
 
-### 1. Reusable Groovy Shared Library Usage (`Jenkinsfile`)
-To keep application repositories lightweight and standard across all FinacPlus teams:
+The `Jenkinsfile` uses Jenkins Declarative Pipeline with Groovy scripting. Here's what each stage does:
+
+### Stage 1: Checkout & Verification
+Prints the current branch, commit SHA, and workspace path for traceability.
+
+### Stage 2: Unit Testing
+Runs `pytest` inside a Python 3.11 virtual environment against `app/tests/`. Tests cover:
+- Health endpoints (`/healthz`, `/readyz`)
+- Prometheus metrics endpoint (`/metrics`)
+- Loan application API flow (POST + GET)
+
+### Stage 3: Docker Build + Security Scan
+- Builds a multi-stage Docker image tagged with `<commit-sha>-<build-number>` for traceability (not just `latest`)
+- Runs **Trivy** vulnerability scanner against the built image to catch CRITICAL/HIGH CVEs before pushing
+- Pushes the image to Docker Hub
+
+### Stage 4: Kubernetes Deployment + Auto-Rollback
+- Creates the target namespace if it doesn't exist
+- Applies K8s manifests (`deployment.yaml`, `service.yaml`, `configmap.yaml`)
+- Updates the deployment image to the newly built tag
+- Watches `kubectl rollout status --timeout=120s`
+- **If the rollout fails** (pods crash, fail readiness probes, or timeout):
+  - Runs `kubectl rollout undo` to restore the previous stable version
+  - Marks the build as failed
+
+This is the core reliability feature — bad code never stays running in the cluster.
+
+---
+
+## How Scalability is Handled
+
+The assignment asks for a solution that works across **different Git repositories and Kubernetes clusters**.
+
+### Multiple Clusters
+The pipeline uses parameterized `CLUSTER_CONTEXT` and `ENVIRONMENT`. To deploy to a different cluster, you just change the context:
+```groovy
+// Local development
+CLUSTER_CONTEXT = 'docker-desktop'
+
+// Production GKE
+CLUSTER_CONTEXT = 'gke_project_region_cluster-name'
+```
+
+No manifest changes needed — `kubectl --context=<name>` handles the routing.
+
+### Multiple Repositories
+The `jenkins/jenkins-shared-library/` folder contains the same pipeline logic broken into reusable Groovy steps. If FinacPlus has 20 microservices, each repo would only need a short Jenkinsfile:
 
 ```groovy
 @Library('finacplus-shared-library') _
 
 standardPipeline(
-    appName: 'toorak-lending-api',
-    appType: 'fastapi',
-    dockerRegistry: 'docker.io/maniksinghal29/toorak-lending-api',
-    dockerCredentialsId: 'docker-hub-credentials',
-    targetNamespace: 'finacplus-lending',
-    targetClusterContext: 'docker-desktop', // Easily switch to GCP GKE or AWS EKS
-    k8sCredentialsId: 'k8s-kubeconfig-credentials',
-    manifestsPath: 'k8s/base',
-    enableSecurityScan: true,
-    enableAutoRollback: true
+    appName: 'new-service',
+    dockerRegistry: 'docker.io/maniksinghal29/new-service',
+    targetNamespace: 'finacplus-prod',
+    targetClusterContext: 'gke-prod-cluster'
 )
 ```
 
-### 2. Multi-Cluster Adaptability
-The pipeline accepts a `targetClusterContext` parameter. To redirect deployments from local development to production GCP GKE or AWS EKS, engineers simply modify the context name or pass a cluster-scoped Kubeconfig secret:
-```groovy
-// Example: Deploying to GCP GKE in staging
-deployToK8s(
-    targetClusterContext: 'gke_toorak-platform_asia-south1_lending-prod',
-    targetNamespace: 'lending-prod'
-)
-```
-
-### 3. Automated Rollback & Fault Tolerance
-In `jenkins-shared-library/vars/deployToK8s.groovy`, the pipeline enforces continuous health checks:
-```groovy
-if (sh(script: "kubectl --context=${clusterContext} rollout status deployment/${appName} -n ${targetNamespace} --timeout=120s", returnStatus: true) != 0) {
-    echo "❌ Deployment failed readiness checks! Triggering automated rollback..."
-    sh "kubectl --context=${clusterContext} rollout undo deployment/${appName} -n ${targetNamespace}"
-    sh "kubectl --context=${clusterContext} rollout status deployment/${appName} -n ${targetNamespace} --timeout=60s"
-    error("Deployment rolled back to previous stable release due to healthcheck timeout.")
-}
-```
+One central library update improves all pipelines at once.
 
 ---
 
-## Quickstart & Verification Runbook
+## Security Practices
 
-### Option 1: One-Command Local Verification (Instant Test)
-Run the automated verification script to test all 5 pipeline stages against your local Docker and Kubernetes engine:
-
-```bash
-./scripts/verify-local.sh
-```
-**What this validates:**
-1. Verifies Docker daemon and Kubernetes cluster readiness.
-2. Runs the isolated containerized PyTest test suite (5/5 tests pass).
-3. Builds the multi-stage, non-root Docker image.
-4. Performs Trivy container vulnerability scan.
-5. Deploys to Kubernetes, verifies zero-downtime rolling update, and prints healthy pod states.
-
-### Option 2: Test Automated Rollback on Broken Release
-To verify how the pipeline protects the cluster against bad deployments:
-
-```bash
-./scripts/simulate-failure-rollback.sh
-```
-**Expected Output:**
-- The script introduces an invalid image tag.
-- Kubernetes detects readiness failure and pauses traffic migration.
-- Rollout times out $\rightarrow$ the script executes `kubectl rollout undo`.
-- Cluster automatically reverts to the previous stable pods without dropping connections!
+| Layer | What's Done |
+|-------|-------------|
+| **Container** | Multi-stage Dockerfile; runs as non-root user (UID 10001), `capabilities: drop: ALL` |
+| **Image Scanning** | Trivy scans for CRITICAL/HIGH CVEs before pushing to registry |
+| **Kubernetes** | `runAsNonRoot: true` in pod security context; readiness + liveness probes |
+| **RBAC** | `jenkins-rbac.yaml` creates a dedicated ServiceAccount with only the permissions Jenkins needs (deployments, services, pods, configmaps) |
+| **Credentials** | Docker Hub credentials stored in Jenkins Credential Store, never hardcoded |
 
 ---
 
-## Setting Up Jenkins & Local Sandbox
+## Setup Instructions
 
-### 1. Launch Dockerized Jenkins
+### Prerequisites
+- Docker Desktop with Kubernetes enabled
+- Git
+
+### 1. Start Jenkins
 ```bash
 docker-compose -f docker-compose.jenkins.yml up -d
 ```
-Access Jenkins at **`http://localhost:8080`**.
+Access at `http://localhost:8080`.
 
-### 2. Configure Credentials in Jenkins
-Navigate to **Manage Jenkins $\rightarrow$ Credentials $\rightarrow$ Global**:
-- **Docker Hub Credentials**:
-  - Kind: *Username with password*
-  - ID: `docker-hub-credentials`
-  - Username: `maniksinghal29`
-  - Password: `<Your-Docker-Personal-Access-Token>`
-- **Kubernetes Kubeconfig** *(optional if mounted via compose)*:
-  - Kind: *Secret file*
-  - ID: `k8s-kubeconfig-credentials`
-  - File: `~/.kube/config`
+### 2. Add Credentials in Jenkins
+Go to **Manage Jenkins → Credentials → Global**:
 
-### 3. Configure Git Webhook
-1. Go to your GitHub repository $\rightarrow$ **Settings $\rightarrow$ Webhooks $\rightarrow$ Add Webhook**.
-2. **Payload URL**: `http://<your-jenkins-ip-or-ngrok>:8080/github-webhook/`
-3. **Content type**: `application/json`
-4. **Events**: Select *Just the push event*.
+- **Docker Hub**: Kind = *Username with password*, ID = `docker-hub-credentials`
+- **Kubeconfig** (optional): Kind = *Secret file*, ID = `k8s-kubeconfig-credentials`, File = `~/.kube/config`
 
----
+### 3. Set Up Git Webhook
+In your GitHub repo → **Settings → Webhooks → Add Webhook**:
+- **URL**: `http://<your-jenkins-ip>:8080/github-webhook/`
+- **Content type**: `application/json`
+- **Events**: Just the push event
 
-## SRE Observability: Prometheus & Grafana
-
-The application exposes Prometheus metrics at `/metrics`.
-
-### Golden Signals Dashboard (`monitoring/grafana/dashboard-toorak-lending.json`)
-The included dashboard visualizes:
-- **Throughput**: `sum(rate(http_requests_total[1m])) by (handler, status)`
-- **Latency (P95/P99)**: `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))`
-- **Error Budget (5xx/4xx)**: Ratio of 5xx responses over total requests.
-- **Pod Saturation**: CPU and memory working set utilization across pods.
+### 4. Create Pipeline Job
+In Jenkins → **New Item → Pipeline**:
+- SCM: Git, Repository URL: your repo URL
+- Script Path: `Jenkinsfile`
 
 ---
 
-## Cloud Deployment: Google Cloud Platform (GCP GKE)
+## Quick Verification (Without Jenkins)
 
-For enterprise production on Google Cloud:
-1. **Provision Infrastructure with Terraform**:
-   ```bash
-   cd terraform/gke
-   terraform init
-   terraform plan -out=tfplan
-   terraform apply tfplan
-   ```
-2. **Authenticate Kubectl to GKE**:
-   ```bash
-   gcloud container clusters get-credentials toorak-lending-gke --region asia-south1-a --project <GCP_PROJECT_ID>
-   ```
-3. Set `targetClusterContext` in `Jenkinsfile` to your GKE cluster context name. The pipeline executes without modifying a single line of deployment manifests!
+### Run all pipeline stages locally:
+```bash
+./scripts/verify-local.sh
+```
+This tests Docker, pytest, image build, Trivy scan, and K8s deployment in sequence.
+
+### Test the auto-rollback:
+```bash
+./scripts/simulate-failure-rollback.sh
+```
+Deploys a broken image tag → K8s detects failure → script runs `rollout undo` → cluster restores to healthy state.
 
 ---
 
-## Author & Candidate Information
+## Monitoring Recommendations
+
+The application exposes Prometheus metrics at `/metrics` using `prometheus-fastapi-instrumentator`. A `ServiceMonitor` definition is included in `monitoring/prometheus-service-monitor.yaml`.
+
+For a production CI/CD pipeline, I'd recommend:
+- **Pipeline metrics**: Track build duration, success/failure rate, and deployment frequency using the Jenkins Prometheus plugin
+- **Application metrics**: Scrape the `/metrics` endpoint with Prometheus for request latency, error rates, and throughput
+- **Dashboarding**: Use Grafana to visualize golden signals (latency, traffic, errors, saturation)
+- **Alerting**: Set up alerts for build failures, deployment rollbacks, and pod restarts
+
+---
+
+## Author
 - **Candidate:** Manik Singhal
-- **Role:** DevOps Engineer – Intern 
+- **Role:** DevOps Engineer – Intern

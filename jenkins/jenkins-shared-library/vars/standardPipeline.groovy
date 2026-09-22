@@ -74,7 +74,7 @@ def call(Map config = [:]) {
                             imageTag: deployedImageTag,
                             targetNamespace: namespace,
                             targetClusterContext: cluster,
-                            manifestsPath: config.get('manifestsPath', 'k8s/base'),
+                            manifestsPath: config.get('manifestsPath', 'k8s'),
                             k8sCredentialsId: env.K8S_CREDS_ID,
                             enableAutoRollback: rollbackEnabled
                         )
