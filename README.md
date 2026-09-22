@@ -59,7 +59,7 @@ Developer → Git Push → GitHub Webhook → Jenkins Pipeline
 
 The `Jenkinsfile` uses Jenkins Declarative Pipeline with Groovy scripting. Below is the live execution view from Build #3 showing all stages succeeding end-to-end:
 
-![Jenkins Pipeline Stage View (Build #3 Success)](screenshots/06-jenkins-pipeline-build-3-success.png)
+![Jenkins Pipeline Stage View (Build #3 Success)](screenshots/05-jenkins-pipeline-build-3-success.png)
 
 Here's what each stage does:
 
@@ -68,9 +68,11 @@ Prints the current branch, commit SHA, and workspace path for traceability.
 
 ### Stage 2: Unit Testing
 Runs `pytest` inside an isolated Python 3.11 container (`python:3.11-slim`) against `app/tests/`. All 5 unit tests pass:
-- Health endpoints (`/healthz`, `/readyz`)
+- Root service information and metadata endpoint (`/`)
+- Kubernetes liveness probe (`/healthz`)
+- Kubernetes readiness probe (`/readyz`)
 - Prometheus metrics endpoint (`/metrics`)
-- Loan application API flow (POST + GET)
+- Loan application submission & retrieval flow (`/api/v1/loans`)
 
 ![Jenkins Build #3 Unit Tests Passed](screenshots/04-jenkins-build-3-unit-tests-passed.png)
 
@@ -78,8 +80,6 @@ Runs `pytest` inside an isolated Python 3.11 container (`python:3.11-slim`) agai
 - Builds a multi-stage Docker image tagged with `<commit-sha>-<build-number>` for traceability (not just `latest`)
 - Runs **Trivy** vulnerability scanner against the built image to catch CRITICAL/HIGH CVEs before pushing
 - Authenticates securely via Jenkins credentials and pushes the image to Docker Hub
-
-![Docker Login & Image Push](screenshots/05-jenkins-docker-login-and-push.png)
 
 ### Stage 4: Kubernetes Deployment + Auto-Rollback
 - Creates the target namespace if it doesn't exist
@@ -189,19 +189,19 @@ Here is the operational verification of the Docker containers and Kubernetes res
 ### Kubernetes Workload Status
 Verification of active pods and ClusterIP service running in the `finacplus-dev` namespace:
 
-![Kubernetes Pods and Service Running](screenshots/10-k8s-pods-and-service-running.png)
+![Kubernetes Pods and Service Running](screenshots/09-k8s-pods-and-service-running.png)
 
 ### Local Docker Image & Container Status
 The built image is verified locally via Docker CLI and inspected in Docker Desktop confirming it is active and in-use:
 
-![Docker CLI Image Verification](screenshots/07-docker-cli-image-verification.png)
+![Docker CLI Image Verification](screenshots/06-docker-cli-image-verification.png)
 
-![Docker Desktop Image Inspection](screenshots/08-docker-desktop-image-in-use.png)
+![Docker Desktop Image Inspection](screenshots/07-docker-desktop-image-in-use.png)
 
 ### Docker Desktop Kubernetes Cluster
 The underlying single-node Kubernetes cluster running via Docker Desktop:
 
-![Docker Desktop Kubernetes Cluster Settings](screenshots/09-docker-desktop-kubernetes-cluster.png)
+![Docker Desktop Kubernetes Cluster Settings](screenshots/08-docker-desktop-kubernetes-cluster.png)
 
 ---
 
