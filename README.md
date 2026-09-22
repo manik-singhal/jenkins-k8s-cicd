@@ -74,7 +74,7 @@ Runs `pytest` inside an isolated Python 3.11 container (`python:3.11-slim`) agai
 - Prometheus metrics endpoint (`/metrics`)
 - Loan application submission & retrieval flow (`/api/v1/loans`)
 
-![Jenkins Build #3 Unit Tests Passed](screenshots/04-jenkins-build-3-unit-tests-passed.png)
+![Jenkins Build #3 Unit Tests Passed](screenshots/04-jenkins-build-unit-tests-passed.png)
 
 ### Stage 3: Docker Build + Security Scan
 - Builds a multi-stage Docker image tagged with `<commit-sha>-<build-number>` for traceability (not just `latest`)
