@@ -21,11 +21,10 @@ Built as a DevOps assignment for **FinacPlus / Toorak Capital Partners**.
 Developer → Git Push → GitHub Webhook → Jenkins Pipeline
                                             │
                                     ┌───────┴───────┐
-                                    │  Stage 1: Test │ (PyTest in virtualenv)
-                                    │  Stage 2: Build│ (Docker multi-stage)
-                                    │  Stage 3: Scan │ (Trivy CVE scan)
-                                    │  Stage 4: Push │ (Docker Hub)
-                                    │  Stage 5: Deploy│(kubectl → K8s cluster)
+                                    │  Stage 1: SCM  │ (Checkout & Commit Audit)
+                                    │  Stage 2: Test │ (PyTest in virtualenv)
+                                    │  Stage 3: Build│ (Docker Build + Trivy + Push)
+                                    │  Stage 4: Deploy│(kubectl → K8s cluster)
                                     │     └── Rollback if health check fails
                                     └───────────────┘
 ```
