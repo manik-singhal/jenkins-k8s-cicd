@@ -167,29 +167,5 @@ In Jenkins → **New Item → Pipeline**:
 
 ---
 
-## Quick Verification (Without Jenkins)
-
-You can verify each part of the pipeline locally from your terminal:
-
-```bash
-# 1. Run unit tests
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r app/requirements.txt
-pytest app/tests/ -v
-
-# 2. Build and run container
-docker build -t toorak-lending-api:latest .
-docker run -d -p 8000:8000 --name test-api toorak-lending-api:latest
-curl http://localhost:8000/healthz
-curl http://localhost:8000/metrics
-docker stop test-api && docker rm test-api
-
-# 3. Dry-run Kubernetes manifests
-kubectl apply --dry-run=client -f k8s/
-```
-
----
-
 ## Author
-- **Candidate:** Manik Singhal
-- **Role:** DevOps Engineer – Intern
+- Manik Singhal
