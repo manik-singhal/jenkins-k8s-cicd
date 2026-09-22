@@ -12,6 +12,10 @@ pipeline {
         booleanParam(name: 'ENABLE_AUTO_ROLLBACK', defaultValue: true, description: 'Rollback K8s deployment automatically on failure')
     }
 
+    triggers {
+        githubPush()
+    }
+
     options {
         buildDiscarder(logRotator(numToKeepStr: '15'))
         timeout(time: 30, unit: 'MINUTES')
