@@ -174,6 +174,8 @@ In your GitHub repo → **Settings → Webhooks → Add Webhook**:
 - **Content type**: `application/json`
 - **Events**: Just the push event
 
+*(Note: For local testing on `localhost`, builds are triggered via **Build with Parameters** or an `ngrok` tunnel, as GitHub requires a publicly reachable address to deliver webhook payloads).*
+
 ### 4. Create Pipeline Job
 In Jenkins → **New Item → Pipeline**:
 - Definition: **Pipeline script from SCM**
@@ -207,6 +209,20 @@ Single-node Kubernetes cluster running healthy in Docker Desktop settings:
 
 ---
 
+## Production Considerations
+
+For local validation, this assignment was executed using Docker Desktop and a local Jenkins controller. In an enterprise cloud production setup (such as AWS EKS or GCP GKE), the following standard practices would be adopted:
+
+- **Managed Kubernetes**: Run on **AWS EKS** or **GCP GKE** across multiple availability zones with managed node groups for high availability.
+- **IAM Authentication**: Replace static kubeconfig files with cloud-native IAM integration — **IAM Roles for Service Accounts (IRSA)** on AWS or **Workload Identity** on GCP — granting Jenkins short-lived, least-privilege tokens.
+- **Private Image Registry**: Use **Amazon ECR** or **GCP Artifact Registry** backed by private VPC endpoints with vulnerability scanning policies blocking critical CVEs.
+- **Secrets Management**: Store database passwords and API keys in **AWS Secrets Manager** or **HashiCorp Vault**, syncing them into Kubernetes pods using the **External Secrets Operator (ESO)**.
+- **Ingress & TLS**: Expose services through an **ALB / NGINX Ingress Controller** with **cert-manager** automating TLS certificate issuance and renewals.
+- **Observability & Alerting**: Scrape application metrics via Prometheus Operator, create service dashboards in Grafana, and send alerts for rollout failures or elevated 5xx error rates to Slack or PagerDuty.
+
+---
+
 ## Author
 - Manik Singhal
+
 
