@@ -46,48 +46,50 @@ Developer → Git Push → GitHub Webhook → Jenkins Pipeline
 │   └── tests/
 │       └── test_main.py              # Unit tests covering health, metrics, and API
 │
-└── k8s/                              # Kubernetes manifests
-    ├── deployment.yaml               # RollingUpdate, probes, resource limits, non-root
-    ├── service.yaml                  # ClusterIP service
-    ├── configmap.yaml                # App environment config
-    └── jenkins-rbac.yaml             # Least-privilege ServiceAccount for Jenkins
+├── k8s/                              # Kubernetes manifests
+│   ├── deployment.yaml               # RollingUpdate, probes, resource limits, non-root
+│   ├── service.yaml                  # ClusterIP service
+│   ├── configmap.yaml                # App environment config
+│   └── jenkins-rbac.yaml             # Least-privilege ServiceAccount for Jenkins
+│
+└── screenshots/                      # Pipeline execution and cluster verification screenshots
 ```
 
 ---
 
 ## Pipeline Stages (Jenkinsfile)
 
-The `Jenkinsfile` uses Jenkins Declarative Pipeline with Groovy scripting. Below is the live execution view from Build #3 showing all stages succeeding end-to-end:
+The `Jenkinsfile` uses Jenkins Declarative Pipeline with Groovy scripting. Here is the stage view from Build #3 showing a complete successful run:
 
 ![Jenkins Pipeline Stage View (Build #3 Success)](screenshots/05-jenkins-pipeline-build-3-success.png)
 
 Here's what each stage does:
 
 ### Stage 1: Checkout & Verification
-Prints the current branch, commit SHA, and workspace path for traceability.
+Prints the current branch, commit SHA, and workspace path for build traceability.
 
 ### Stage 2: Unit Testing
-Runs `pytest` inside an isolated Python 3.11 container (`python:3.11-slim`) against `app/tests/`. All 5 unit tests pass:
-- Root service information and metadata endpoint (`/`)
+Runs `pytest` inside a clean `python:3.11-slim` container against `app/tests/`. All 5 unit tests pass:
+- Root endpoint status (`/`)
 - Kubernetes liveness probe (`/healthz`)
 - Kubernetes readiness probe (`/readyz`)
 - Prometheus metrics endpoint (`/metrics`)
-- Loan application submission & retrieval flow (`/api/v1/loans`)
+- Loan application submission and retrieval flow (`/api/v1/loans`)
 
 ![Jenkins Build #3 Unit Tests Passed](screenshots/04-jenkins-build-unit-tests-passed.png)
 
 ### Stage 3: Docker Build + Security Scan
-- Builds a multi-stage Docker image tagged with `<commit-sha>-<build-number>` for traceability (not just `latest`)
-- Runs **Trivy** vulnerability scanner against the built image to catch CRITICAL/HIGH CVEs before pushing
-- Authenticates securely via Jenkins credentials and pushes the image to Docker Hub
+- Builds the image using `Dockerfile` and tags it with commit SHA and build number (`<commit-sha>-<build-number>`) instead of just `latest`
+- Scans the image with **Trivy** for CRITICAL and HIGH vulnerabilities before pushing
+- Pushes the image to Docker Hub using credentials stored in Jenkins
 
 ### Stage 4: Kubernetes Deployment + Auto-Rollback
-- Creates the target namespace if it doesn't exist
+- Creates the target namespace if it doesn't exist (`finacplus-dev`)
 - Applies K8s manifests (`deployment.yaml`, `service.yaml`, `configmap.yaml`)
 - Updates the deployment image to the newly built tag
-- Watches `kubectl rollout status --timeout=120s`
-- **If the rollout fails** (pods crash, fail readiness probes, or timeout):
-  - Runs `kubectl rollout undo` to restore the previous stable version
+- Monitors rollout with `kubectl rollout status --timeout=120s`
+- **If the rollout fails** (crash loop, failed health probes, timeout):
+  - Runs `kubectl rollout undo` to immediately restore the previous stable version
   - Marks the build as failed
 
 This is the core reliability feature — bad code never stays running in the cluster.
@@ -151,55 +153,55 @@ curl http://localhost:8000/metrics
 
 ---
 
-## Setup Instructions
+## Setup & Reproduction Guide
 
-### Prerequisites
-- Jenkins server with Git, Docker Pipeline, Credentials Binding, and Kubernetes CLI plugins installed
-- Docker and `kubectl` available on the Jenkins agent
-- A running Kubernetes cluster (Docker Desktop, Minikube, or cloud cluster)
+### 1. Environment Prerequisites
+- **Local Kubernetes Cluster**: In Docker Desktop, go to **Settings → Kubernetes** and make sure **Enable Kubernetes** is checked (see screenshot `08`). Verify with `kubectl cluster-info`.
+- **Jenkins**: Run locally (`java -jar jenkins.war --httpPort=8085` or via Homebrew/Docker) with Git, Docker Pipeline, and Credentials Binding plugins installed.
+- **CLI Tools**: Ensure `docker` and `kubectl` are installed and available in your `$PATH`.
 
-### 1. Add Credentials in Jenkins
-Go to **Manage Jenkins → Credentials → Global**:
+### 2. Configure Credentials
+In Jenkins → **Manage Jenkins → Credentials → Global**:
 
-- **Docker Hub**: Kind = *Username with password*, ID = `docker-hub-credentials`
-- **Kubeconfig** (optional if running outside cluster): Kind = *Secret file*, ID = `k8s-kubeconfig-credentials`
+- **Docker Hub**: Kind = *Username with password*, ID = `docker-hub-credentials` (stores username & PAT).
+- **Kubeconfig** (optional for remote clusters): Kind = *Secret file*, ID = `k8s-kubeconfig-credentials`. For local Docker Desktop, `kubectl` automatically uses `~/.kube/config`.
 
 ![Jenkins Docker Hub Credentials Configuration](screenshots/01-jenkins-docker-hub-credentials.png)
 
-### 2. Set Up Git Webhook
+### 3. Configure Git Webhook
 In your GitHub repo → **Settings → Webhooks → Add Webhook**:
-- **URL**: `http://<your-jenkins-ip>:8080/github-webhook/`
+- **Payload URL**: `http://<your-jenkins-host>:8080/github-webhook/`
 - **Content type**: `application/json`
 - **Events**: Just the push event
 
-### 3. Create Pipeline Job
+### 4. Create Pipeline Job
 In Jenkins → **New Item → Pipeline**:
 - Definition: **Pipeline script from SCM**
-- SCM: Git, Repository URL: `https://github.com/manik-singhal/jenkins-k8s-cicd.git`
+- SCM: **Git**, Repository URL: `https://github.com/manik-singhal/jenkins-k8s-cicd.git`
 - Script Path: `Jenkinsfile`
 
 ![Jenkins Pipeline SCM Configuration](screenshots/02-jenkins-pipeline-scm-config.png)
 
 ---
 
-## Infrastructure & Deployment Verification
+## Verification (Screenshots)
 
-Here is the operational verification of the Docker containers and Kubernetes resources running on the local cluster:
+Below are the verification screenshots from the live pipeline run and local deployment:
 
-### Kubernetes Workload Status
-Verification of active pods and ClusterIP service running in the `finacplus-dev` namespace:
+### 1. Kubernetes Pods & Service Running
+Both pods are running healthy with 0 restarts and the ClusterIP service is routing traffic in the `finacplus-dev` namespace:
 
 ![Kubernetes Pods and Service Running](screenshots/09-k8s-pods-and-service-running.png)
 
-### Local Docker Image & Container Status
-The built image is verified locally via Docker CLI and inspected in Docker Desktop confirming it is active and in-use:
+### 2. Docker Image Verification
+Verifying the built image locally via CLI and inside Docker Desktop (confirming it is actively in use by the running Kubernetes pods):
 
 ![Docker CLI Image Verification](screenshots/06-docker-cli-image-verification.png)
 
 ![Docker Desktop Image Inspection](screenshots/07-docker-desktop-image-in-use.png)
 
-### Docker Desktop Kubernetes Cluster
-The underlying single-node Kubernetes cluster running via Docker Desktop:
+### 3. Kubernetes Cluster in Docker Desktop
+Single-node Kubernetes cluster running healthy in Docker Desktop settings:
 
 ![Docker Desktop Kubernetes Cluster Settings](screenshots/08-docker-desktop-kubernetes-cluster.png)
 
