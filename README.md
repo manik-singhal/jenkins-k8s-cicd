@@ -57,21 +57,29 @@ Developer → Git Push → GitHub Webhook → Jenkins Pipeline
 
 ## Pipeline Stages (Jenkinsfile)
 
-The `Jenkinsfile` uses Jenkins Declarative Pipeline with Groovy scripting. Here's what each stage does:
+The `Jenkinsfile` uses Jenkins Declarative Pipeline with Groovy scripting. Below is the live execution view from Build #3 showing all stages succeeding end-to-end:
+
+![Jenkins Pipeline Stage View (Build #3 Success)](screenshots/06-jenkins-pipeline-build-3-success.png)
+
+Here's what each stage does:
 
 ### Stage 1: Checkout & Verification
 Prints the current branch, commit SHA, and workspace path for traceability.
 
 ### Stage 2: Unit Testing
-Runs `pytest` inside a Python 3.11 virtual environment against `app/tests/`. Tests cover:
+Runs `pytest` inside an isolated Python 3.11 container (`python:3.11-slim`) against `app/tests/`. All 5 unit tests pass:
 - Health endpoints (`/healthz`, `/readyz`)
 - Prometheus metrics endpoint (`/metrics`)
 - Loan application API flow (POST + GET)
 
+![Jenkins Build #3 Unit Tests Passed](screenshots/04-jenkins-build-3-unit-tests-passed.png)
+
 ### Stage 3: Docker Build + Security Scan
 - Builds a multi-stage Docker image tagged with `<commit-sha>-<build-number>` for traceability (not just `latest`)
 - Runs **Trivy** vulnerability scanner against the built image to catch CRITICAL/HIGH CVEs before pushing
-- Pushes the image to Docker Hub
+- Authenticates securely via Jenkins credentials and pushes the image to Docker Hub
+
+![Docker Login & Image Push](screenshots/05-jenkins-docker-login-and-push.png)
 
 ### Stage 4: Kubernetes Deployment + Auto-Rollback
 - Creates the target namespace if it doesn't exist
@@ -91,7 +99,10 @@ This is the core reliability feature — bad code never stays running in the clu
 The assignment asks for a solution that works across **different Git repositories and Kubernetes clusters**.
 
 ### Multiple Clusters
-The pipeline uses parameterized `CLUSTER_CONTEXT` and `ENVIRONMENT`. To deploy to a different cluster, you just change the context parameter:
+The pipeline uses parameterized `CLUSTER_CONTEXT` and `ENVIRONMENT`. To deploy to a different cluster, you just select the parameters when triggering the build:
+
+![Jenkins Build with Parameters UI](screenshots/03-jenkins-build-with-parameters.png)
+
 ```groovy
 // Local development
 CLUSTER_CONTEXT = 'docker-desktop'
@@ -153,6 +164,8 @@ Go to **Manage Jenkins → Credentials → Global**:
 - **Docker Hub**: Kind = *Username with password*, ID = `docker-hub-credentials`
 - **Kubeconfig** (optional if running outside cluster): Kind = *Secret file*, ID = `k8s-kubeconfig-credentials`
 
+![Jenkins Docker Hub Credentials Configuration](screenshots/01-jenkins-docker-hub-credentials.png)
+
 ### 2. Set Up Git Webhook
 In your GitHub repo → **Settings → Webhooks → Add Webhook**:
 - **URL**: `http://<your-jenkins-ip>:8080/github-webhook/`
@@ -161,10 +174,37 @@ In your GitHub repo → **Settings → Webhooks → Add Webhook**:
 
 ### 3. Create Pipeline Job
 In Jenkins → **New Item → Pipeline**:
-- SCM: Git, Repository URL: your repo URL
+- Definition: **Pipeline script from SCM**
+- SCM: Git, Repository URL: `https://github.com/manik-singhal/jenkins-k8s-cicd.git`
 - Script Path: `Jenkinsfile`
+
+![Jenkins Pipeline SCM Configuration](screenshots/02-jenkins-pipeline-scm-config.png)
+
+---
+
+## Infrastructure & Deployment Verification
+
+Here is the operational verification of the Docker containers and Kubernetes resources running on the local cluster:
+
+### Kubernetes Workload Status
+Verification of active pods and ClusterIP service running in the `finacplus-dev` namespace:
+
+![Kubernetes Pods and Service Running](screenshots/10-k8s-pods-and-service-running.png)
+
+### Local Docker Image & Container Status
+The built image is verified locally via Docker CLI and inspected in Docker Desktop confirming it is active and in-use:
+
+![Docker CLI Image Verification](screenshots/07-docker-cli-image-verification.png)
+
+![Docker Desktop Image Inspection](screenshots/08-docker-desktop-image-in-use.png)
+
+### Docker Desktop Kubernetes Cluster
+The underlying single-node Kubernetes cluster running via Docker Desktop:
+
+![Docker Desktop Kubernetes Cluster Settings](screenshots/09-docker-desktop-kubernetes-cluster.png)
 
 ---
 
 ## Author
 - Manik Singhal
+
