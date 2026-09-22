@@ -88,13 +88,13 @@ def call(Map config = [:]) {
                 cleanWs deleteDirs: true, notFailBuild: true
             }
             success {
-                notifyBuildStatus('SUCCESS', appName: env.APP_NAME)
+                echo "Pipeline SUCCESS: ${env.APP_NAME} Build #${env.BUILD_NUMBER}"
             }
             failure {
-                notifyBuildStatus('FAILURE', appName: env.APP_NAME)
+                echo "Pipeline FAILED: ${env.APP_NAME} Build #${env.BUILD_NUMBER}"
             }
             unstable {
-                notifyBuildStatus('UNSTABLE', appName: env.APP_NAME)
+                echo "Pipeline UNSTABLE: ${env.APP_NAME} Build #${env.BUILD_NUMBER}"
             }
         }
     }

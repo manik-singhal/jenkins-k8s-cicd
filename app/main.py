@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
@@ -7,7 +7,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(
     title="Toorak Lending Engine API",
-    description="Mission-critical microservice for loan origination and risk evaluation - FinacPlus / Toorak Capital Partners",
+    description="Loan origination API for FinacPlus / Toorak Capital Partners",
     version="1.0.0"
 )
 
@@ -32,7 +32,7 @@ class HealthResponse(BaseModel):
 
 @app.get("/healthz", response_model=HealthResponse, tags=["Health"])
 def health_check():
-    """Liveness probe to ensure the service container is alive."""
+    """Health check endpoint for K8s liveness probe."""
     return {
         "status": "healthy",
         "version": os.getenv("APP_VERSION", "1.0.0"),
@@ -42,7 +42,7 @@ def health_check():
 
 @app.get("/readyz", tags=["Health"])
 def readiness_check():
-    """Readiness probe verifying that dependencies and configs are ready to accept traffic."""
+    """Readiness check for K8s."""
     # Add any simulated DB connection check here
     return {"status": "ready", "ready": True}
 

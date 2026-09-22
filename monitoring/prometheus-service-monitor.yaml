@@ -20,17 +20,3 @@ spec:
       path: /metrics
       interval: 15s
       scrapeTimeout: 10s
----
-# Alternative Standard Prometheus Config snippet for non-operator setups:
-# - job_name: 'toorak-lending-api'
-#   metrics_path: '/metrics'
-#   kubernetes_sd_configs:
-#     - role: pod
-#   relabel_configs:
-#     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-#       action: keep
-#       regex: true
-#     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-#       action: replace
-#       target_label: __metrics_path__
-#       regex: (.+)

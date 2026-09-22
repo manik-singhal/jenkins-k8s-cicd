@@ -1,7 +1,6 @@
-// ==============================================================================
-// FinacPlus CI/CD Pipeline - Standalone All-In-One Pipeline (Groovy & Declarative)
-// Self-contained pipeline for immediate execution without configuring external Shared Libraries.
-// ==============================================================================
+// FinacPlus CI/CD Pipeline
+// Deploys the Toorak Lending API to Kubernetes with automated testing,
+// security scanning, and rollback on failure.
 
 pipeline {
     agent any
@@ -32,32 +31,25 @@ pipeline {
     stages {
         stage('Checkout & SCM Verification') {
             steps {
-                echo "=========================================================="
-                echo "📥 STAGE 1: Git Checkout & Environment Verification"
-                echo "=========================================================="
+                echo "--- Stage 1: Git Checkout ---"
                 sh '''
-                    echo "[INFO] Running on Node: ${NODE_NAME}"
-                    echo "[INFO] Current Git Branch: ${GIT_BRANCH:-main}"
-                    echo "[INFO] Commit SHA: $(git rev-parse HEAD 2>/dev/null || echo 'local')"
+                    echo "Running on Node: ${NODE_NAME}"
+                    echo "Git Branch: ${GIT_BRANCH:-main}"
+                    echo "Commit SHA: $(git rev-parse HEAD 2>/dev/null || echo 'local')"
                 '''
             }
         }
 
-        stage('Unit Testing & Code Quality') {
+        stage('Unit Testing') {
             steps {
-                echo "=========================================================="
-                echo "🧪 STAGE 2: Automated Testing (FastAPI & PyTest)"
-                echo "=========================================================="
+                echo "--- Stage 2: Running PyTest ---"
                 sh '''
-                    echo "[INFO] Setting up Python test runner..."
                     python3 -m venv .venv
                     . .venv/bin/activate
                     pip install --quiet --upgrade pip
                     pip install --quiet -r app/requirements.txt
                     
-                    echo "[INFO] Running test suite..."
                     python -m pytest app/tests/ -v
-                    echo "[SUCCESS] Unit tests executed successfully!"
                 '''
             }
         }
@@ -65,21 +57,19 @@ pipeline {
         stage('Container Build & Security Scan') {
             steps {
                 script {
-                    echo "=========================================================="
-                    echo "🐳 STAGE 3: Build & Security Vulnerability Scan"
-                    echo "=========================================================="
+                    echo "--- Stage 3: Docker Build + Trivy Scan ---"
                     String commitSha = sh(script: 'git rev-parse --short HEAD 2>/dev/null || echo "latest"', returnStdout: true).trim()
                     String buildNum = env.BUILD_NUMBER ?: "1"
                     env.IMAGE_TAG = "${env.DOCKER_REGISTRY}:${commitSha}-${buildNum}"
                     env.IMAGE_LATEST = "${env.DOCKER_REGISTRY}:latest"
 
                     sh """
-                        echo "[INFO] Building multi-stage container image: ${env.IMAGE_TAG}..."
+                        echo "Building image: ${env.IMAGE_TAG}"
                         docker build -t ${env.IMAGE_TAG} -t ${env.IMAGE_LATEST} -f Dockerfile .
                     """
 
                     if (params.RUN_SECURITY_SCAN) {
-                        echo "[INFO] Running Trivy vulnerability scan on ${env.IMAGE_TAG}..."
+                        echo "Running Trivy vulnerability scan..."
                         sh """
                             if command -v trivy >/dev/null 2>&1; then
                                 trivy image --severity CRITICAL,HIGH --exit-code 0 ${env.IMAGE_TAG}
@@ -90,7 +80,7 @@ pipeline {
                         """
                     }
 
-                    // Authenticate & Push
+                    // Push to Docker Hub
                     try {
                         withCredentials([usernamePassword(
                             credentialsId: env.DOCKER_CREDS_ID,
@@ -98,12 +88,10 @@ pipeline {
                             passwordVariable: 'DOCKER_PASS'
                         )]) {
                             sh """
-                                echo "[INFO] Logging in to Docker Hub..."
                                 echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
-                                echo "[INFO] Pushing image artifact to registry..."
                                 docker push ${env.IMAGE_TAG}
                                 docker push ${env.IMAGE_LATEST}
-                                echo "[SUCCESS] Image successfully pushed!"
+                                echo "Image pushed successfully."
                             """
                         }
                     } catch (Exception e) {
@@ -116,36 +104,31 @@ pipeline {
         stage('Kubernetes Deployment') {
             steps {
                 script {
-                    echo "=========================================================="
-                    echo "☸️ STAGE 4: Automated Kubernetes Deployment & Verification"
-                    echo "=========================================================="
+                    echo "--- Stage 4: Deploy to K8s + Rollback Check ---"
                     String targetNamespace = "finacplus-${params.ENVIRONMENT}"
                     String clusterContext = params.CLUSTER_CONTEXT
                     int timeoutSeconds = 120
 
                     sh """
-                        echo "[INFO] Context: ${clusterContext} | Target Namespace: ${targetNamespace}"
+                        echo "Deploying to context=${clusterContext}, namespace=${targetNamespace}"
                         kubectl --context=${clusterContext} create namespace ${targetNamespace} --dry-run=client -o yaml | kubectl --context=${clusterContext} apply -f -
 
-                        echo "[INFO] Applying Kubernetes manifests..."
                         kubectl --context=${clusterContext} apply -n ${targetNamespace} -f ${env.MANIFESTS_DIR}/
 
-                        echo "[INFO] Updating container image in Deployment..."
+                        echo "Updating deployment image to ${env.IMAGE_TAG}..."
                         kubectl --context=${clusterContext} set image deployment/${env.APP_NAME} ${env.APP_NAME}=${env.IMAGE_TAG} -n ${targetNamespace} --record=true
 
-                        echo "[INFO] Verifying rolling update rollout status..."
+                        echo "Waiting for rollout to complete (timeout: ${timeoutSeconds}s)..."
                         if kubectl --context=${clusterContext} rollout status deployment/${env.APP_NAME} -n ${targetNamespace} --timeout=${timeoutSeconds}s; then
-                            echo "=========================================================="
-                            echo "✅ [DEPLOY SUCCESS] Service healthy and serving traffic!"
-                            echo "=========================================================="
-                            kubectl --context=${clusterContext} get pods,svc,hpa -n ${targetNamespace} -l app=${env.APP_NAME}
+                            echo "✅ Deployment successful."
+                            kubectl --context=${clusterContext} get pods,svc -n ${targetNamespace} -l app=${env.APP_NAME}
                         else
-                            echo "❌ [DEPLOY FAILED] Readiness check or rollout failed!"
+                            echo "❌ Deployment failed!"
                             if [ "${params.ENABLE_AUTO_ROLLBACK}" = "true" ]; then
-                                echo "🔄 [ROLLBACK] Rolling back to previous stable revision..."
+                                echo "Rolling back to previous revision..."
                                 kubectl --context=${clusterContext} rollout undo deployment/${env.APP_NAME} -n ${targetNamespace}
                                 kubectl --context=${clusterContext} rollout status deployment/${env.APP_NAME} -n ${targetNamespace} --timeout=60s
-                                echo "⚠️ [ROLLBACK SUCCESS] Cluster state reverted to previous stable deployment."
+                                echo "Rollback complete."
                             fi
                             exit 1
                         fi
@@ -160,14 +143,10 @@ pipeline {
             cleanWs deleteDirs: true, notFailBuild: true
         }
         success {
-            echo "=========================================================="
-            echo "🎉 PIPELINE SUCCESS: Build #${BUILD_NUMBER} completed cleanly!"
-            echo "=========================================================="
+            echo "🎉 Pipeline SUCCESS: Build #${BUILD_NUMBER} completed."
         }
         failure {
-            echo "=========================================================="
-            echo "🚨 PIPELINE FAILED: Build #${BUILD_NUMBER} encountered an error."
-            echo "=========================================================="
+            echo "🚨 Pipeline FAILED: Build #${BUILD_NUMBER}. Check console output for details."
         }
     }
 }
