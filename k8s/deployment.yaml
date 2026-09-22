@@ -4,8 +4,6 @@ metadata:
   name: toorak-lending-api
   labels:
     app: toorak-lending-api
-    app.kubernetes.io/name: toorak-lending-api
-    app.kubernetes.io/part-of: finacplus-platform
 spec:
   replicas: 2
   strategy:
@@ -20,7 +18,6 @@ spec:
     metadata:
       labels:
         app: toorak-lending-api
-        app.kubernetes.io/name: toorak-lending-api
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
@@ -29,22 +26,13 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
       containers:
         - name: toorak-lending-api
           image: docker.io/maniksinghal29/toorak-lending-api:latest
           imagePullPolicy: IfNotPresent
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
-            capabilities:
-              drop:
-                - ALL
           ports:
             - name: http
               containerPort: 8000
-              protocol: TCP
           envFrom:
             - configMapRef:
                 name: toorak-lending-config

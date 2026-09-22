@@ -21,7 +21,7 @@ Built as a DevOps assignment for **FinacPlus / Toorak Capital Partners**.
 Developer → Git Push → GitHub Webhook → Jenkins Pipeline
                                             │
                                     ┌───────┴───────┐
-                                    │  Stage 1: Test │ (PyTest in container)
+                                    │  Stage 1: Test │ (PyTest in virtualenv)
                                     │  Stage 2: Build│ (Docker multi-stage)
                                     │  Stage 3: Scan │ (Trivy CVE scan)
                                     │  Stage 4: Push │ (Docker Hub)
@@ -38,39 +38,20 @@ Developer → Git Push → GitHub Webhook → Jenkins Pipeline
 .
 ├── Jenkinsfile                       # Main pipeline — all stages in one file
 ├── Dockerfile                        # Multi-stage build, runs as non-root user
-├── docker-compose.jenkins.yml        # Spin up local Jenkins with Docker + K8s access
 ├── .gitignore
 ├── .dockerignore
 │
-├── app/                              # Sample FastAPI microservice
+├── app/                              # FastAPI microservice
 │   ├── main.py                       # Endpoints: /healthz, /readyz, /metrics, /api/v1/loans
 │   ├── requirements.txt
 │   └── tests/
-│       └── test_main.py              # 5 unit tests covering health, metrics, and API
+│       └── test_main.py              # Unit tests covering health, metrics, and API
 │
-├── jenkins/
-│   ├── Dockerfile.jenkins            # Custom Jenkins image with Docker CLI, kubectl, Trivy
-│   └── jenkins-shared-library/       # Groovy Shared Library (for scaling to multiple repos)
-│       └── vars/
-│           ├── standardPipeline.groovy
-│           ├── runUnitTests.groovy
-│           ├── buildAndPushImage.groovy
-│           ├── deployToK8s.groovy
-│           ├── securityScan.groovy
-│           └── notifyBuildStatus.groovy
-│
-├── k8s/                              # Kubernetes manifests
-│   ├── deployment.yaml               # RollingUpdate, probes, resource limits, non-root
-│   ├── service.yaml                  # ClusterIP service
-│   ├── configmap.yaml                # App environment config
-│   └── jenkins-rbac.yaml             # Least-privilege ServiceAccount for Jenkins
-│
-├── monitoring/
-│   └── prometheus-service-monitor.yaml
-│
-└── scripts/
-    ├── verify-local.sh               # Run all pipeline stages locally in one command
-    └── simulate-failure-rollback.sh  # Prove the auto-rollback works
+└── k8s/                              # Kubernetes manifests
+    ├── deployment.yaml               # RollingUpdate, probes, resource limits, non-root
+    ├── service.yaml                  # ClusterIP service
+    ├── configmap.yaml                # App environment config
+    └── jenkins-rbac.yaml             # Least-privilege ServiceAccount for Jenkins
 ```
 
 ---
@@ -111,7 +92,7 @@ This is the core reliability feature — bad code never stays running in the clu
 The assignment asks for a solution that works across **different Git repositories and Kubernetes clusters**.
 
 ### Multiple Clusters
-The pipeline uses parameterized `CLUSTER_CONTEXT` and `ENVIRONMENT`. To deploy to a different cluster, you just change the context:
+The pipeline uses parameterized `CLUSTER_CONTEXT` and `ENVIRONMENT`. To deploy to a different cluster, you just change the context parameter:
 ```groovy
 // Local development
 CLUSTER_CONTEXT = 'docker-desktop'
@@ -123,20 +104,7 @@ CLUSTER_CONTEXT = 'gke_project_region_cluster-name'
 No manifest changes needed — `kubectl --context=<name>` handles the routing.
 
 ### Multiple Repositories
-The `jenkins/jenkins-shared-library/` folder contains the same pipeline logic broken into reusable Groovy steps. If FinacPlus has 20 microservices, each repo would only need a short Jenkinsfile:
-
-```groovy
-@Library('finacplus-shared-library') _
-
-standardPipeline(
-    appName: 'new-service',
-    dockerRegistry: 'docker.io/maniksinghal29/new-service',
-    targetNamespace: 'finacplus-prod',
-    targetClusterContext: 'gke-prod-cluster'
-)
-```
-
-One central library update improves all pipelines at once.
+The pipeline is designed to be easily adapted for any service. By parameterizing `APP_NAME`, `DOCKER_REGISTRY`, and cluster contexts in the `environment {}` block, this single `Jenkinsfile` can be dropped into other microservice repos with minimal changes to environment variables.
 
 ---
 
@@ -144,7 +112,7 @@ One central library update improves all pipelines at once.
 
 | Layer | What's Done |
 |-------|-------------|
-| **Container** | Multi-stage Dockerfile; runs as non-root user (UID 10001), `capabilities: drop: ALL` |
+| **Container** | Multi-stage Dockerfile; runs as non-root user (UID 10001) |
 | **Image Scanning** | Trivy scans for CRITICAL/HIGH CVEs before pushing to registry |
 | **Kubernetes** | `runAsNonRoot: true` in pod security context; readiness + liveness probes |
 | **RBAC** | `jenkins-rbac.yaml` creates a dedicated ServiceAccount with only the permissions Jenkins needs (deployments, services, pods, configmaps) |
@@ -152,31 +120,47 @@ One central library update improves all pipelines at once.
 
 ---
 
+## Monitoring
+
+The application exposes Prometheus metrics at `/metrics` using `prometheus_client`.
+
+In `k8s/deployment.yaml`, the pod template includes standard Prometheus scrape annotations:
+```yaml
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/metrics"
+  prometheus.io/port: "8000"
+```
+
+This is the standard cloud-native approach: any Prometheus instance running in the cluster automatically discovers and scrapes these pods without needing custom CRDs or separate configuration files.
+
+You can verify the metrics directly:
+```bash
+curl http://localhost:8000/metrics
+```
+
+---
+
 ## Setup Instructions
 
 ### Prerequisites
-- Docker Desktop with Kubernetes enabled
-- Git
+- Jenkins server with Git, Docker Pipeline, Credentials Binding, and Kubernetes CLI plugins installed
+- Docker and `kubectl` available on the Jenkins agent
+- A running Kubernetes cluster (Docker Desktop, Minikube, or cloud cluster)
 
-### 1. Start Jenkins
-```bash
-docker-compose -f docker-compose.jenkins.yml up -d
-```
-Access at `http://localhost:8080`.
-
-### 2. Add Credentials in Jenkins
+### 1. Add Credentials in Jenkins
 Go to **Manage Jenkins → Credentials → Global**:
 
 - **Docker Hub**: Kind = *Username with password*, ID = `docker-hub-credentials`
-- **Kubeconfig** (optional): Kind = *Secret file*, ID = `k8s-kubeconfig-credentials`, File = `~/.kube/config`
+- **Kubeconfig** (optional if running outside cluster): Kind = *Secret file*, ID = `k8s-kubeconfig-credentials`
 
-### 3. Set Up Git Webhook
+### 2. Set Up Git Webhook
 In your GitHub repo → **Settings → Webhooks → Add Webhook**:
 - **URL**: `http://<your-jenkins-ip>:8080/github-webhook/`
 - **Content type**: `application/json`
 - **Events**: Just the push event
 
-### 4. Create Pipeline Job
+### 3. Create Pipeline Job
 In Jenkins → **New Item → Pipeline**:
 - SCM: Git, Repository URL: your repo URL
 - Script Path: `Jenkinsfile`
@@ -185,29 +169,24 @@ In Jenkins → **New Item → Pipeline**:
 
 ## Quick Verification (Without Jenkins)
 
-### Run all pipeline stages locally:
+You can verify each part of the pipeline locally from your terminal:
+
 ```bash
-./scripts/verify-local.sh
+# 1. Run unit tests
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r app/requirements.txt
+pytest app/tests/ -v
+
+# 2. Build and run container
+docker build -t toorak-lending-api:latest .
+docker run -d -p 8000:8000 --name test-api toorak-lending-api:latest
+curl http://localhost:8000/healthz
+curl http://localhost:8000/metrics
+docker stop test-api && docker rm test-api
+
+# 3. Dry-run Kubernetes manifests
+kubectl apply --dry-run=client -f k8s/
 ```
-This tests Docker, pytest, image build, Trivy scan, and K8s deployment in sequence.
-
-### Test the auto-rollback:
-```bash
-./scripts/simulate-failure-rollback.sh
-```
-Deploys a broken image tag → K8s detects failure → script runs `rollout undo` → cluster restores to healthy state.
-
----
-
-## Monitoring Recommendations
-
-The application exposes Prometheus metrics at `/metrics` using `prometheus-fastapi-instrumentator`. A `ServiceMonitor` definition is included in `monitoring/prometheus-service-monitor.yaml`.
-
-For a production CI/CD pipeline, I'd recommend:
-- **Pipeline metrics**: Track build duration, success/failure rate, and deployment frequency using the Jenkins Prometheus plugin
-- **Application metrics**: Scrape the `/metrics` endpoint with Prometheus for request latency, error rates, and throughput
-- **Dashboarding**: Use Grafana to visualize golden signals (latency, traffic, errors, saturation)
-- **Alerting**: Set up alerts for build failures, deployment rollbacks, and pod restarts
 
 ---
 
